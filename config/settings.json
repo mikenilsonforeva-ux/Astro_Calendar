@@ -1,0 +1,16 @@
+{
+  "theme": "dark",
+  "ephemeris_file": "de440s.bsp",
+  "default_location": {
+    "name": "Москва",
+    "latitude": 55.7558,
+    "longitude": 37.6173,
+    "elevation_m": 150,
+    "timezone": "Europe/Moscow"
+  },
+  "http": {
+    "connect_timeout": 5,
+    "read_timeout": 20,
+    "retries": 3
+  }
+}

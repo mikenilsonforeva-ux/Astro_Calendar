@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.vscode/
+build/
+dist/
+*.spec.bak
+# Данные пользователя и крупные файлы эфемерид (скачиваются приложением)
+data/
+logs/*.log*
+*.db
+*.bsp
+*.part

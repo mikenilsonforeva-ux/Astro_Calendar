@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Скачать эфемериды для тестов (JPL NAIF)
+        shell: bash
+        run: curl -L --fail -o resources/ephemeris/de440s.bsp https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp
+      - name: Тесты
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest
+      - name: Сборка EXE
+        run: ./build_exe.bat
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AstronomicalCalendar-windows
+          path: dist/AstronomicalCalendar
