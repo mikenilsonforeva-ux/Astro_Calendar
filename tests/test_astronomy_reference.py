@@ -150,3 +150,17 @@ def test_meteor_visibility_text(ctx):
     e = next(x for x in meteors.shower_events(2024) if x.params["code"] == "PER")
     text = meteors.local_visibility_text(ctx, e)
     assert "радиант" in text and "Луны" in text
+
+
+def test_weather_report_groups_nights_and_scores_dark_hours(ctx):
+    from api.weather_api import HourlyWeather
+    from services.weather_service import WeatherService
+    start = utc(2026, 12, 10, 12, 0)    # зимой в Москве ночь длинная
+    hours = [HourlyWeather(start + timedelta(hours=i), -5, 60, 0, 5, 0, 25000, 1015) for i in range(48)]
+    nights = WeatherService.build_report(ctx, hours)
+    assert len(nights) >= 2
+    first = nights[0]
+    assert first.average is not None and 0 <= first.average <= 100
+    assert any(h.score.score is None for h in first.hours)        # днём индекса нет
+    with_target = WeatherService.build_report(ctx, hours, "jupiter")
+    assert with_target[0].hours[0].target_altitude is not None

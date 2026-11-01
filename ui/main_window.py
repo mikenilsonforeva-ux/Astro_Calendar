@@ -13,7 +13,9 @@ from ui.moon_page import MoonPage
 from ui.placeholder_page import PlaceholderPage
 from ui.planets_page import PlanetsPage
 from ui.settings_page import SettingsPage
+from ui.solar_page import SolarPage
 from ui.sun_page import SunPage
+from ui.weather_page import WeatherPage
 from ui.update_page import UpdatePage
 
 
@@ -38,10 +40,8 @@ class MainWindow(QMainWindow):
                             "Каталоги Мессье и NGC, поиск и фильтрация, данные SIMBAD/VizieR."),
             make_meteor_page(state),
             make_eclipse_page(state),
-            PlaceholderPage(state, "Астрономическая погода", "этап 4",
-                            "Прогноз Open-Meteo и индекс пригодности ночи (0–100) для наблюдений."),
-            PlaceholderPage(state, "Солнечная активность", "этап 4/7",
-                            "Данные NOAA SWPC: вспышки, КВМ, индекс Kp, прогноз магнитных бурь."),
+            WeatherPage(state),
+            SolarPage(state),
             PlaceholderPage(state, "Искусственные спутники", "этап 7",
                             "TLE из CelesTrak, МКС, расчёт пролётов над местом наблюдения."),
             SettingsPage(state),

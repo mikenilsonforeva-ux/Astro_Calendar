@@ -46,7 +46,7 @@ class HomePage(BasePage):
         self.moon_box, self.moon_label = _card("Луна")
         self.sun_box, self.sun_label = _card("Солнце")
         self.weather_box, self.weather_label = _card("Астрономическая погода")
-        self.weather_label.setText("Прогноз появится на этапе 4 (интеграция с Open-Meteo).")
+        self.weather_label.setText("Откройте раздел «Астрономическая погода».")
         grid.addWidget(self.moon_box, 0, 0)
         grid.addWidget(self.sun_box, 0, 1)
         grid.addWidget(self.weather_box, 0, 2)

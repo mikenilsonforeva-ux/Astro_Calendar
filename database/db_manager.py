@@ -328,3 +328,25 @@ class DatabaseManager:
                 "ORDER BY id DESC LIMIT 1", (source,)
             ).fetchone()
         return row["finished_at"] if row else None
+
+    # ---- погода ---------------------------------------------------------------
+    def save_weather(self, location_id: int, rows: list[tuple[str, dict]], source: str) -> None:
+        """Сохраняет почасовой прогноз: список (время UTC ISO, словарь значений)."""
+        now = _now_iso()
+        with self.connect() as conn:
+            conn.executemany(
+                "INSERT INTO weather_data (location_id, forecast_time, payload_json, fetched_at, source) "
+                "VALUES (?, ?, ?, ?, ?) ON CONFLICT(location_id, forecast_time) DO UPDATE SET "
+                "payload_json = excluded.payload_json, fetched_at = excluded.fetched_at, "
+                "source = excluded.source",
+                [(location_id, t, json.dumps(p), now, source) for t, p in rows])
+
+    def load_weather(self, location_id: int, start_iso: str) -> tuple[list[tuple[str, dict]], str | None]:
+        """Сохранённый прогноз начиная с start_iso и время последней загрузки."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT forecast_time, payload_json, fetched_at FROM weather_data "
+                "WHERE location_id = ? AND forecast_time >= ? ORDER BY forecast_time",
+                (location_id, start_iso)).fetchall()
+        fetched = max((r["fetched_at"] for r in rows), default=None)
+        return [(r["forecast_time"], json.loads(r["payload_json"])) for r in rows], fetched
