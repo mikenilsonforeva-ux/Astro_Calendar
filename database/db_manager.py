@@ -98,8 +98,17 @@ CREATE TABLE update_history (
 );
 """
 
+SCHEMA_V2 = """
+ALTER TABLE celestial_objects ADD COLUMN catalog TEXT;
+ALTER TABLE celestial_objects ADD COLUMN messier INTEGER;
+ALTER TABLE celestial_objects ADD COLUMN name_ru TEXT;
+ALTER TABLE celestial_objects ADD COLUMN size_minor_arcmin REAL;
+CREATE INDEX idx_objects_type ON celestial_objects (object_type);
+CREATE INDEX idx_objects_messier ON celestial_objects (messier);
+"""
+
 # Новые миграции добавлять в конец списка.
-MIGRATIONS: list[str] = [SCHEMA_V1]
+MIGRATIONS: list[str] = [SCHEMA_V1, SCHEMA_V2]
 
 
 def _now_iso() -> str:
@@ -350,3 +359,45 @@ class DatabaseManager:
                 (location_id, start_iso)).fetchall()
         fetched = max((r["fetched_at"] for r in rows), default=None)
         return [(r["forecast_time"], json.loads(r["payload_json"])) for r in rows], fetched
+
+    # ---- каталог небесных объектов -------------------------------------------
+    OBJECT_COLUMNS = ("catalog_id", "catalog", "name", "name_ru", "object_type", "ra_deg", "dec_deg",
+                      "magnitude", "size_arcmin", "size_minor_arcmin", "constellation", "distance_ly",
+                      "description", "image_url", "source", "messier")
+
+    def replace_objects(self, source: str, objects: list[dict]) -> int:
+        """Заменяет все объекты указанного источника новым списком. Возвращает число записей."""
+        cols = self.OBJECT_COLUMNS
+        sql = (f"INSERT OR REPLACE INTO celestial_objects ({', '.join(cols)}) "
+               f"VALUES ({', '.join('?' * len(cols))})")
+        with self.connect() as conn:
+            conn.execute("DELETE FROM celestial_objects WHERE source = ?", (source,))
+            conn.executemany(sql, [tuple(o.get(c) for c in cols) for o in objects])
+        return len(objects)
+
+    def count_objects(self) -> int:
+        with self.connect() as conn:
+            return int(conn.execute("SELECT COUNT(*) FROM celestial_objects").fetchone()[0])
+
+    def list_objects(self, types: list[str] | None = None, constellation: str | None = None,
+                     messier_only: bool = False, max_magnitude: float | None = None) -> list[dict]:
+        sql, args = "SELECT * FROM celestial_objects WHERE 1=1", []
+        if types:
+            sql += f" AND object_type IN ({','.join('?' * len(types))})"
+            args += types
+        if constellation:
+            sql += " AND constellation = ?"
+            args.append(constellation)
+        if messier_only:
+            sql += " AND messier IS NOT NULL"
+        if max_magnitude is not None:
+            sql += " AND magnitude IS NOT NULL AND magnitude <= ?"
+            args.append(max_magnitude)
+        with self.connect() as conn:
+            return [dict(r) for r in conn.execute(sql, args).fetchall()]
+
+    def object_types(self) -> list[str]:
+        with self.connect() as conn:
+            return [r[0] for r in conn.execute(
+                "SELECT DISTINCT object_type FROM celestial_objects WHERE object_type IS NOT NULL "
+                "ORDER BY object_type")]

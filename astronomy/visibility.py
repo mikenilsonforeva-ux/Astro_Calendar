@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
 
 from skyfield import almanac
@@ -57,3 +58,50 @@ def sky_state(sun_alt: float, body_alt: float, elongation: float | None = None) 
     if body_alt < 5:
         return "низко над горизонтом"
     return "видна на тёмном небе" if sun_alt < -12 else "видна в сумерках"
+
+
+# ---------------------------------------------------------------------------
+# Неподвижные объекты (звёзды, объекты глубокого космоса)
+# ---------------------------------------------------------------------------
+@dataclass
+class FixedObjectInfo:
+    altitude: float
+    azimuth: float
+    max_altitude: float            # высота в верхней кульминации (без рефракции)
+    circumpolar: bool              # никогда не заходит
+    never_rises: bool
+    rise: datetime | None = None
+    transit: datetime | None = None
+    set: datetime | None = None
+
+
+def fixed_object_info(ctx: AstroContext, ra_deg: float, dec_deg: float, when_utc: datetime,
+                      with_times: bool = True) -> FixedObjectInfo:
+    """Положение объекта с неподвижными координатами (J2000) для выбранного места.
+
+    Собственные движения и прецессия до эпохи даты Skyfield учитывает сам; для объектов
+    глубокого космоса собственное движение не задаётся (пренебрежимо мало).
+    """
+    from skyfield.api import Star
+    star = Star(ra_hours=ra_deg / 15.0, dec_degrees=dec_deg)
+    alt, az = altitude_azimuth(ctx, star, when_utc)
+    lat = ctx.latitude
+    max_alt = 90.0 - abs(lat - dec_deg)
+    if lat >= 0:
+        circumpolar, never = dec_deg >= 90.0 - lat, dec_deg <= lat - 90.0
+    else:
+        circumpolar, never = dec_deg <= -90.0 - lat, dec_deg >= 90.0 + lat
+    info = FixedObjectInfo(alt, az, max_alt, circumpolar, never)
+    if with_times:
+        day = ctx.local(when_utc).date()
+        start_utc, end_utc = local_day_bounds_utc(day, ctx.tz)
+        t0, t1 = ctx.t(start_utc), ctx.t(end_utc)
+        if not circumpolar and not never:
+            info.rise, info.set = rise_set_times(ctx, star, day, HORIZON_PLANET)
+        transit = almanac.meridian_transits(ctx.eph, star, ctx.topos)
+        tt, ty = almanac.find_discrete(t0, t1, transit)
+        for i in range(len(tt)):
+            if ty[i] == 1:
+                info.transit = ctx.local(tt[i].utc_datetime())
+                break
+    return info

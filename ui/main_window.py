@@ -7,6 +7,7 @@ import config
 from ui.app_state import AppState
 from ui.base_page import BasePage
 from ui.calendar_page import CalendarPage
+from ui.catalog_page import CatalogPage
 from ui.event_list_page import make_eclipse_page, make_meteor_page
 from ui.home_page import HomePage
 from ui.moon_page import MoonPage
@@ -36,8 +37,7 @@ class MainWindow(QMainWindow):
             PlaceholderPage(state, "Звёздное небо", "этап 6",
                             "Интерактивная карта неба: звёзды, созвездия, планеты, Солнце, Луна, "
                             "горизонт, масштабирование и смена даты."),
-            PlaceholderPage(state, "Каталог небесных объектов", "этап 5",
-                            "Каталоги Мессье и NGC, поиск и фильтрация, данные SIMBAD/VizieR."),
+            CatalogPage(state),
             make_meteor_page(state),
             make_eclipse_page(state),
             WeatherPage(state),

@@ -164,3 +164,21 @@ def test_weather_report_groups_nights_and_scores_dark_hours(ctx):
     assert any(h.score.score is None for h in first.hours)        # днём индекса нет
     with_target = WeatherService.build_report(ctx, hours, "jupiter")
     assert with_target[0].hours[0].target_altitude is not None
+
+
+def test_fixed_object_m31_from_moscow(ctx):
+    from astronomy import visibility
+    info = visibility.fixed_object_info(ctx, 10.6847, 41.2688, utc(2026, 11, 2, 18, 0))
+    assert info.max_altitude == pytest.approx(90 - abs(55.7558 - 41.2688), abs=0.01)
+    assert info.circumpolar and not info.never_rises and info.rise is None
+    assert info.transit is not None
+    assert -90 <= info.altitude <= 90 and 0 <= info.azimuth < 360
+
+
+def test_fixed_object_rise_set_and_never_rises(ctx):
+    from astronomy import visibility
+    sirius = visibility.fixed_object_info(ctx, 101.287, -16.716, utc(2026, 1, 15, 12, 0))
+    assert not sirius.circumpolar and not sirius.never_rises
+    assert sirius.rise is not None and sirius.set is not None and 10 < sirius.max_altitude < 20
+    southern = visibility.fixed_object_info(ctx, 201.0, -60.0, utc(2026, 1, 15, 12, 0), with_times=False)
+    assert southern.never_rises and southern.altitude < 0
