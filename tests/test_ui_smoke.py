@@ -23,5 +23,8 @@ def test_main_window_opens_all_pages(tmp_path):
     for row in range(window.nav.count()):
         window.nav.setCurrentRow(row)
         app.processEvents()
+    from PySide6.QtCore import QThreadPool
+    QThreadPool.globalInstance().waitForDone(20000)
+    app.processEvents()
     assert window.nav.count() == 14
     assert state.location.name == "Москва"

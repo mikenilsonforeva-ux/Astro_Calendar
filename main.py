@@ -45,7 +45,10 @@ def main() -> int:
         return 1
 
     window.show()
-    return app.exec()
+    code = app.exec()
+    from PySide6.QtCore import QThreadPool
+    QThreadPool.globalInstance().waitForDone(5000)   # дождаться фоновых задач перед выходом
+    return code
 
 
 if __name__ == "__main__":
