@@ -14,7 +14,7 @@ from pathlib import Path
 
 APP_NAME = "AstronomicalCalendar"
 APP_TITLE = "Астрономический календарь"
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 
 FROZEN = bool(getattr(sys, "frozen", False))
 SOURCE_DIR = Path(__file__).resolve().parent.parent

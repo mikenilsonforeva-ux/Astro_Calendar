@@ -27,4 +27,5 @@ def test_main_window_opens_all_pages(tmp_path):
     QThreadPool.globalInstance().waitForDone(20000)
     app.processEvents()
     assert window.nav.count() == 14
+    assert window.pages[5].title == "Звёздное небо"
     assert state.location.name == "Москва"

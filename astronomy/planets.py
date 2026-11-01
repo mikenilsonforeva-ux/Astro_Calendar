@@ -6,7 +6,8 @@
   (зависят от расстояний и фазового угла). Для Сатурна не учтено влияние колец,
   поэтому ошибка может достигать ~1 звёздной величины; для остальных — порядка 0.1–0.3;
 * соединения и противостояния определяются по эклиптической долготе относительно Солнца;
-* ретроградные периоды и сближения планет между собой пока не реализованы (этап 3+).
+* ретроградные периоды — по знаку скорости изменения эклиптической долготы (моменты стояний);
+  сближения планет между собой и с Луной пока не реализованы.
 """
 from __future__ import annotations
 
@@ -171,6 +172,52 @@ def _elongation_function(ctx: AstroContext, body, step_days: float):
     return f
 
 
+def _retrograde_function(ctx: AstroContext, body):
+    """1, пока эклиптическая долгота планеты убывает (ретроградное движение), иначе 0."""
+    earth = ctx.eph["earth"]
+
+    def longitude(t):
+        _, lon, _ = earth.at(t).observe(body).apparent().ecliptic_latlon()
+        return lon.degrees
+
+    def f(t):
+        diff = longitude(ctx.ts.tt_jd(t.tt + 0.5)) - longitude(ctx.ts.tt_jd(t.tt - 0.5))
+        return (((diff + 180.0) % 360.0 - 180.0) < 0).astype(int)
+
+    f.step_days = 2.0
+    return f
+
+
+@dataclass
+class MotionSeries:
+    key: str
+    name: str
+    times: list                 # aware datetime (UTC)
+    longitude: np.ndarray       # эклиптическая долгота, непрерывная (без скачков 360°→0), градусы
+    elongation: np.ndarray      # угловое расстояние от Солнца, градусы
+    retrograde: np.ndarray      # bool: движение попятное
+
+
+def motion_series(ctx: AstroContext, key: str, start_utc: datetime, days: int,
+                  step_days: float = 2.0) -> MotionSeries:
+    """Ряд положений планеты для графиков движения (геоцентрические видимые координаты)."""
+    from datetime import timedelta
+    _, name, eph_name, _, _ = PLANET_BY_KEY[key]
+    body = ctx.eph[eph_name]
+    count = int(days / step_days) + 1
+    moments = [start_utc + timedelta(days=step_days * i) for i in range(count)]
+    times = ctx.ts.from_datetimes(moments)
+    at = ctx.eph["earth"].at(times)
+    app = at.observe(body).apparent()
+    _, lon, _ = app.ecliptic_latlon()
+    elong = at.observe(ctx.eph["sun"]).apparent().separation_from(app).degrees
+    unwrapped = np.degrees(np.unwrap(np.radians(np.asarray(lon.degrees))))
+    retro = np.concatenate([np.diff(unwrapped) < 0, [False]])
+    if len(retro) > 1:
+        retro[-1] = retro[-2]
+    return MotionSeries(key, name, moments, unwrapped, np.asarray(elong), retro)
+
+
 def planet_events(ctx: AstroContext, t0, t1) -> list[AstroEvent]:
     events: list[AstroEvent] = []
     for key, name, eph_name, _, inner in PLANETS:
@@ -201,6 +248,18 @@ def planet_events(ctx: AstroContext, t0, t1) -> list[AstroEvent]:
                                  f"(по эклиптической долготе). Расстояние до Земли {d_au:.3f} а. е."),
                     utc_time=moment, params={"kind": "conjunction", "distance_au": round(d_au, 4)},
                     source=EPHEMERIS_SOURCE))
+        times, state = find_discrete(t0, t1, _retrograde_function(ctx, body))
+        for i in range(len(times)):
+            starts = int(state[i]) == 1
+            events.append(AstroEvent(
+                category=CAT_PLANET, body=key,
+                title=f"{'Начало' if starts else 'Конец'} попятного движения: {name}",
+                description=(f"Момент стояния: {name} " + (
+                    "останавливается на фоне звёзд и начинает двигаться с востока на запад (ретроградно)."
+                    if starts else "останавливается и возобновляет прямое движение с запада на восток.")),
+                utc_time=times[i].utc_datetime(),
+                params={"kind": "retrograde_start" if starts else "retrograde_end"},
+                source=EPHEMERIS_SOURCE))
         if inner:
             f = _elongation_function(ctx, body, step_days=5.0 if key == "mercury" else 10.0)
             tm, values = find_maxima(t0, t1, f)

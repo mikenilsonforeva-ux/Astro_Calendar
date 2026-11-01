@@ -182,3 +182,80 @@ def test_fixed_object_rise_set_and_never_rises(ctx):
     assert sirius.rise is not None and sirius.set is not None and 10 < sirius.max_altitude < 20
     southern = visibility.fixed_object_info(ctx, 201.0, -60.0, utc(2026, 1, 15, 12, 0), with_times=False)
     assert southern.never_rises and southern.altitude < 0
+
+
+def test_retrograde_periods_mars_and_mercury(ctx):
+    from astronomy import planets
+    events = planets.planet_events(ctx, ctx.ts.utc(2024, 1, 1), ctx.ts.utc(2026, 1, 1))
+    retro = [e for e in events if e.params.get("kind", "").startswith("retrograde")]
+    mars = [e for e in retro if e.body == "mars"]
+    # Марс 2024–2025: ретроградное движение с 6.12.2024 по 24.02.2025
+    assert [e.params["kind"] for e in mars][:2] == ["retrograde_start", "retrograde_end"]
+    assert close(mars[0].utc_time, utc(2024, 12, 6, 12), 36 * 60)
+    assert close(mars[1].utc_time, utc(2025, 2, 24, 12), 36 * 60)
+    mercury = [e for e in retro if e.body == "mercury"]
+    assert len(mercury) >= 6                            # около 3 периодов в год
+    for a, b in zip(mercury[::2], mercury[1::2]):
+        assert a.params["kind"] == "retrograde_start" and 18 <= (b.utc_time - a.utc_time).days <= 26
+
+
+def test_motion_series_shapes_and_retrograde_flag(ctx):
+    from astronomy import planets
+    series = planets.motion_series(ctx, "mars", utc(2024, 11, 1), 200, 2.0)
+    assert len(series.times) == len(series.longitude) == len(series.elongation) == len(series.retrograde)
+    assert series.retrograde.any() and not series.retrograde.all()
+    assert 0 <= series.elongation.min() and series.elongation.max() <= 180
+    assert abs(series.longitude[-1] - series.longitude[0]) < 120
+
+
+def _fake_catalog():
+    import numpy as np
+    from astronomy.stars import StarCatalog
+    # Сириус, Вега, Полярная, Альтаир, Денеб (координаты J2000, собственные движения Hipparcos)
+    return StarCatalog(
+        hip=np.array([32349, 91262, 11767, 97649, 102098]),
+        ra=np.array([101.28715533, 279.23473479, 37.95456067, 297.69582730, 310.35797975]),
+        dec=np.array([-16.71611586, 38.78368896, 89.26410897, 8.86832120, 45.28033881]),
+        mag=np.array([-1.44, 0.03, 1.98, 0.76, 1.25]),
+        parallax=np.array([379.21, 130.23, 7.54, 194.95, 1.01]),
+        pm_ra=np.array([-546.01, 200.94, 44.48, 536.82, 1.56]),
+        pm_dec=np.array([-1223.07, 286.23, -11.85, 385.54, 1.55]))
+
+
+def test_sky_snapshot_consistency(ctx):
+    from astronomy import sky_snapshot, sun
+    when = utc(2026, 11, 2, 18, 0)
+    snap = sky_snapshot.build_snapshot(ctx, when, _fake_catalog(), {"Ori": (83.0, 0.0), "UMa": (165.0, 55.0)},
+                                       [{"catalog_id": "NGC 224", "messier": 31, "ra_deg": 10.6847,
+                                         "dec_deg": 41.2688, "magnitude": 3.4}])
+    assert len(snap.star_alt) == 5 and set(snap.star_names) >= {"Сириус", "Вега", "Полярная"}
+    polaris = list(snap.star_hip).index(11767)
+    assert abs(snap.star_alt[polaris] - 55.7558) < 1.5                       # высота Полярной ≈ широте места
+    s = next(b for b in snap.bodies if b.key == "sun")
+    assert abs(s.alt - sun.position(ctx, when).altitude) < 1.0               # то же Солнце (с точностью до рефракции)
+    assert snap.sun_alt == s.alt and len(snap.bodies) == 9
+    assert [b.key for b in snap.bodies][:2] == ["sun", "moon"]
+    moon = snap.bodies[1]
+    assert 0 <= moon.phase_angle < 360 and "освещено" in moon.detail
+    # зенит: звезда в зените имеет высоту 90°
+    import numpy as np
+    from astronomy.sky_snapshot import _altaz
+    alt, _ = _altaz(ctx, ctx.t(when), np.array([snap.zenith_ra]), np.array([snap.zenith_dec]))
+    assert alt[0] > 89.5
+    assert len(snap.const_labels) == 2 and snap.const_labels[0][0] == "Орион"
+    assert snap.deep_sky[0]["alt"] != 0 and len(snap.horizon_ra) == 181
+    assert {c[0] for c in snap.cardinals} == {"С", "В", "Ю", "З"}
+    assert snap.milky_way.alt.shape == (181,) and snap.ecliptic.az.shape == (181,)
+    # точка горизонта действительно на высоте ≈ 0°
+    hz_alt, _ = _altaz(ctx, ctx.t(when), snap.horizon_ra[::30], snap.horizon_dec[::30])
+    assert np.all(np.abs(hz_alt) < 0.6)
+
+
+def test_constellation_centers_are_sane(ctx):
+    from services.star_service import compute_constellation_centers
+    centers = compute_constellation_centers(ctx, step_deg=5.0)
+    assert len(centers) >= 80
+    ra, dec = centers["Ori"]
+    assert 70 < ra < 100 and -15 < dec < 20                       # Орион
+    ra, dec = centers["UMi"]
+    assert dec > 70                                               # Малая Медведица около полюса

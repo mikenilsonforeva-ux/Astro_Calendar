@@ -14,6 +14,7 @@ from ui.moon_page import MoonPage
 from ui.placeholder_page import PlaceholderPage
 from ui.planets_page import PlanetsPage
 from ui.settings_page import SettingsPage
+from ui.sky_page import SkyPage
 from ui.solar_page import SolarPage
 from ui.sun_page import SunPage
 from ui.weather_page import WeatherPage
@@ -34,9 +35,7 @@ class MainWindow(QMainWindow):
             SunPage(state),
             MoonPage(state),
             PlanetsPage(state),
-            PlaceholderPage(state, "Звёздное небо", "этап 6",
-                            "Интерактивная карта неба: звёзды, созвездия, планеты, Солнце, Луна, "
-                            "горизонт, масштабирование и смена даты."),
+            SkyPage(state),
             CatalogPage(state),
             make_meteor_page(state),
             make_eclipse_page(state),

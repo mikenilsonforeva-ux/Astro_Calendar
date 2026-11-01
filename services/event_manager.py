@@ -21,7 +21,7 @@ from services.cache_manager import CacheManager
 log = logging.getLogger(__name__)
 
 # Увеличивать при изменении алгоритмов: старый кэш будет пересчитан.
-ALGORITHM_VERSION = 1
+ALGORITHM_VERSION = 2
 
 
 def _iso(dt: datetime) -> str:
@@ -112,6 +112,8 @@ class EventManager:
             kind = event.params.get("kind")
             if kind == "conjunction":
                 return "Планета рядом с Солнцем на небе: наблюдать нельзя."
+            if kind in ("retrograde_start", "retrograde_end"):
+                return "Глобальное явление: смена направления видимого движения планеты на фоне звёзд."
             state = "над горизонтом" if planet_alt > 0 else "под горизонтом"
             sky = "ночью" if sun_alt < -6 else "днём/в сумерках"
             return (f"В момент события планета {state} (высота {planet_alt:.0f}°), "
