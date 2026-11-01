@@ -6,9 +6,10 @@ from api.http_client import ApiError, HttpClient
 
 
 class FakeResponse:
-    def __init__(self, status=200, payload=None, content=b""):
+    def __init__(self, status=200, payload=None, content=b"", headers=None):
         self.status_code, self._payload, self.content = status, payload, content
         self.headers = {"Content-Length": str(len(content))}
+        self.headers.update(headers or {})
         self.text = ""
 
     def json(self):
@@ -27,6 +28,7 @@ class FakeSession:
 
     def get(self, url, **kwargs):
         self.calls += 1
+        self.last_kwargs = kwargs
         item = self.responses.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -77,6 +79,21 @@ def test_download_checks_size(tmp_path):
     assert not (tmp_path / "f.bin.part").exists()
     c, _ = client([FakeResponse(content=b"abcdef")])
     assert c.download("http://x", tmp_path / "f.bin", min_size=3).read_bytes() == b"abcdef"
+
+
+def test_download_gzip_content_length_mismatch_is_not_an_error(tmp_path):
+    # GitHub отдаёт gzip: Content-Length — размер сжатых данных, а мы получаем распакованные.
+    body = b"x" * 5000
+    c, s = client([FakeResponse(content=body, headers={"Content-Length": "1200",
+                                                       "Content-Encoding": "gzip"})])
+    assert c.download("http://x", tmp_path / "f.csv", min_size=1000).read_bytes() == body
+    assert s.last_kwargs["headers"] == {"Accept-Encoding": "identity"}
+
+
+def test_download_detects_truncated_plain_file(tmp_path):
+    c, _ = client([FakeResponse(content=b"abc", headers={"Content-Length": "100"})])
+    with pytest.raises(ApiError, match="не полностью"):
+        c.download("http://x", tmp_path / "f.bin")
 
 
 def test_geocoding_parse_skips_bad_records():

@@ -32,12 +32,13 @@ class HttpClient:
         self.session.headers.update({"User-Agent": USER_AGENT})
 
     def _request(self, url: str, params: dict | None, stream: bool = False,
-                 timeout: tuple[float, float] | None = None) -> requests.Response:
+                 timeout: tuple[float, float] | None = None,
+                 headers: dict | None = None) -> requests.Response:
         last_error: Exception | None = None
         for attempt in range(1, self.retries + 1):
             try:
                 resp = self.session.get(url, params=params, timeout=timeout or self.timeout,
-                                        stream=stream)
+                                        stream=stream, headers=headers)
                 if resp.status_code in RETRY_STATUSES:
                     last_error = ApiError(f"Сервер ответил кодом {resp.status_code}")
                 elif resp.status_code >= 400:
@@ -72,8 +73,12 @@ class HttpClient:
         dest = Path(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
         part = dest.with_suffix(dest.suffix + ".part")
-        resp = self._request(url, None, stream=True, timeout=(self.timeout[0], 60))
+        # Без сжатия: Content-Length тогда равен размеру файла (при gzip он описывает сжатые данные).
+        resp = self._request(url, None, stream=True, timeout=(self.timeout[0], 60),
+                             headers={"Accept-Encoding": "identity"})
         total = int(resp.headers.get("Content-Length") or 0)
+        if resp.headers.get("Content-Encoding", "identity").lower() not in ("", "identity"):
+            total = 0       # сервер всё равно сжал ответ — размер сверить нельзя
         done = 0
         try:
             with open(part, "wb") as fh:
