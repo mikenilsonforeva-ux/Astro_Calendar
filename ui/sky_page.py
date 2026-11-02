@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 from datetime import datetime, timedelta, timezone
 
-from PySide6.QtCore import QDateTime
+from PySide6.QtCore import QDate, QDateTime, QTime
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit, QGroupBox, QHBoxLayout, QLabel,
                                QPushButton, QTextBrowser, QVBoxLayout, QWidget)
 
@@ -115,7 +115,7 @@ class SkyPage(BasePage):
 
     def _now_local(self) -> QDateTime:
         now = datetime.now(self._tz())
-        return QDateTime(now.year, now.month, now.day, now.hour, now.minute)
+        return QDateTime(QDate(now.year, now.month, now.day), QTime(now.hour, now.minute))
 
     def _shift(self, minutes: int) -> None:
         self.dt_edit.setDateTime(self.dt_edit.dateTime().addSecs(minutes * 60))
