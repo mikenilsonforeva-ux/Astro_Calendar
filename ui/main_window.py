@@ -11,8 +11,8 @@ from ui.catalog_page import CatalogPage
 from ui.event_list_page import make_eclipse_page, make_meteor_page
 from ui.home_page import HomePage
 from ui.moon_page import MoonPage
-from ui.placeholder_page import PlaceholderPage
 from ui.planets_page import PlanetsPage
+from ui.satellites_page import SatellitesPage
 from ui.settings_page import SettingsPage
 from ui.sky_page import SkyPage
 from ui.solar_page import SolarPage
@@ -41,8 +41,7 @@ class MainWindow(QMainWindow):
             make_eclipse_page(state),
             WeatherPage(state),
             SolarPage(state),
-            PlaceholderPage(state, "Искусственные спутники", "этап 7",
-                            "TLE из CelesTrak, МКС, расчёт пролётов над местом наблюдения."),
+            SatellitesPage(state),
             SettingsPage(state),
             UpdatePage(state),
         ]
