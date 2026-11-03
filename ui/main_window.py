@@ -8,7 +8,9 @@ from ui.app_state import AppState
 from ui.base_page import BasePage
 from ui.calendar_page import CalendarPage
 from ui.catalog_page import CatalogPage
+from ui.earth_page import EarthPage
 from ui.event_list_page import make_eclipse_page, make_meteor_page
+from ui.history_page import HistoryPage
 from ui.home_page import HomePage
 from ui.moon_page import MoonPage
 from ui.planets_page import PlanetsPage
@@ -42,6 +44,8 @@ class MainWindow(QMainWindow):
             WeatherPage(state),
             SolarPage(state),
             SatellitesPage(state),
+            EarthPage(state),
+            HistoryPage(state),
             SettingsPage(state),
             UpdatePage(state),
         ]

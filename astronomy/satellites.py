@@ -101,9 +101,32 @@ def current_position(ctx: AstroContext, sat, when_utc: datetime) -> dict:
     geo = sat.at(t)
     sub = wgs84.subpoint(geo)
     alt, az = _altaz(ctx, sat, t)
+    speed = float(np.linalg.norm(geo.velocity.km_per_s))
     return {"latitude": float(sub.latitude.degrees), "longitude": float(sub.longitude.degrees),
-            "height_km": float(sub.elevation.km), "alt": alt, "az": az,
+            "height_km": float(sub.elevation.km), "alt": alt, "az": az, "speed_kms": speed,
             "sunlit": bool(geo.is_sunlit(ctx.eph))}
+
+
+def ground_track(ctx: AstroContext, sat, when_utc: datetime, back_min: float = 45.0,
+                 forward_min: float = 135.0, step_s: float = 30.0) -> dict:
+    """Наземная трасса: подспутниковые точки за прошлые back_min и будущие forward_min минут."""
+    from skyfield.api import wgs84
+    now = ctx.t(when_utc)
+    offsets = np.arange(-back_min * 60.0, forward_min * 60.0 + step_s, step_s) / 86400.0
+    times = ctx.ts.tt_jd(now.tt + offsets)
+    sub = wgs84.subpoint(sat.at(times))
+    lat, lon = np.asarray(sub.latitude.degrees), np.asarray(sub.longitude.degrees)
+    past = offsets <= 0
+    return {"past_lat": lat[past], "past_lon": lon[past], "future_lat": lat[~past],
+            "future_lon": lon[~past]}
+
+
+def subsolar_point(ctx: AstroContext, when_utc: datetime) -> tuple[float, float]:
+    """Подсолнечная точка (широта, долгота): над ней Солнце в зените."""
+    t = ctx.t(when_utc)
+    ra, dec, _ = ctx.eph["earth"].at(t).observe(ctx.eph["sun"]).apparent().radec(epoch="date")
+    lon = (float(ra.hours) - float(t.gast)) * 15.0
+    return float(dec.degrees), float((lon + 180.0) % 360.0 - 180.0)
 
 
 def describe_pass(p: SatPass, tz) -> list[str]:

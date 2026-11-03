@@ -107,3 +107,19 @@ def test_sky_color_gradient_and_describe(app):
 def test_project_roundtrip_of_view_center():
     sx, sy, valid = skymap.stereo_project(120.0, 30.0, 120.0, 30.0)
     assert valid and abs(float(sx)) < 1e-9 and abs(float(sy)) < 1e-9
+
+
+def test_earth_widget_paints(app):
+    from ui.earth_widget import EarthMapWidget, SatDisplay
+    widget = EarthMapWidget()
+    widget.resize(800, 420)
+    lon = np.array([170.0, 175.0, 179.0, -179.0, -170.0])
+    lat = np.array([10.0, 12.0, 14.0, 16.0, 18.0])
+    widget.set_coast([np.array([[0.0, 0.0], [10.0, 10.0], [20.0, 0.0]])])
+    sat = SatDisplay("ISS", "#ff5252", 14.0, 179.0, 420.0, past=(lon[:3], lat[:3]), future=(lon[2:], lat[2:]))
+    widget.set_state([sat], (10.0, 20.0), (55.7, 37.6, "Москва"))
+    assert not widget.grab().toImage().isNull()
+    widget.show_footprint = widget.show_night = False
+    widget.notice = "тест"
+    widget.set_state([], None, None)
+    assert not widget.grab().toImage().isNull()
