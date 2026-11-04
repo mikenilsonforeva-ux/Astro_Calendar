@@ -16,6 +16,7 @@ MODES = ("horizontal", "equatorial")
 DEFAULT_LAYERS = {
     "star_names": True, "asterisms": True, "constellation_names": True, "bodies": True,
     "milky_way": True, "ecliptic": True, "grid": True, "deep_sky": True, "below_horizon": False,
+    "daylight_stars": True,
 }
 MIN_FOV, MAX_FOV = 5.0, 175.0
 
@@ -153,6 +154,8 @@ class SkyMapWidget(QWidget):
         painter.fillPath(clip, sky_color(self.snapshot.sun_alt))
         self._hits = []
         night = float(np.clip((-self.snapshot.sun_alt - 2.0) / 10.0, 0.0, 1.0))   # видимость звёзд
+        if self.layers["daylight_stars"]:
+            night = max(night, 0.8)      # показывать звёзды и при светлом небе (в реальности их не видно)
 
         if self.layers["milky_way"] and night > 0:
             self._draw_milky_way(painter, scale, night)

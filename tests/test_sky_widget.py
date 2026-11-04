@@ -143,3 +143,15 @@ def test_click_payloads_for_report(app):
     widget.object_selected.connect(got.append)
     widget._pick(QPointF(star[0], star[1]))
     assert got and got[0]["type"] == "star"
+
+
+def test_daylight_stars_toggle(app):
+    from ui.sky_widget import SkyMapWidget
+    widget = SkyMapWidget()
+    widget.resize(600, 600)
+    widget.set_snapshot(make_snapshot(sun_alt=20.0))
+    widget.grab()
+    assert any(h[2]["type"] == "star" for h in widget._hits)      # по умолчанию звёзды днём показываются
+    widget.set_layer("daylight_stars", False)
+    widget.grab()
+    assert not any(h[2]["type"] == "star" for h in widget._hits)
