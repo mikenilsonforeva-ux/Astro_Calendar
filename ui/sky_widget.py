@@ -1,6 +1,7 @@
 """Виджет интерактивной карты неба (рисование QPainter, стереографическая проекция)."""
 from __future__ import annotations
 
+import logging
 import math
 
 import numpy as np
@@ -12,6 +13,7 @@ from astronomy import skymap
 from astronomy.coordinates import compass_point, format_dms, format_hms
 from astronomy.sky_snapshot import PLANET_COLORS, SkySnapshot
 
+log = logging.getLogger(__name__)
 MODES = ("horizontal", "equatorial")
 DEFAULT_LAYERS = {
     "star_names": True, "asterisms": True, "constellation_names": True, "bodies": True,
@@ -78,6 +80,7 @@ class SkyMapWidget(QWidget):
         self._hits: list[tuple[float, float, dict]] = []
         self.selected_key: str | None = None
         self._grid_cache: dict[str, list] = {}
+        self._failed_layers: set[str] = set()
 
     # ---- управление ------------------------------------------------------------------
     def set_snapshot(self, snapshot: SkySnapshot, keep_view: bool = True) -> None:
@@ -158,24 +161,22 @@ class SkyMapWidget(QWidget):
             night = max(night, 0.8)      # показывать звёзды и при светлом небе (в реальности их не видно)
 
         if self.layers["milky_way"] and night > 0:
-            self._draw_milky_way(painter, scale, night)
+            self._safe("milky_way", self._draw_milky_way, painter, scale, night)
         if self.layers["grid"]:
-            self._draw_grid(painter, scale, r_max)
+            self._safe("grid", self._draw_grid, painter, scale, r_max)
         if self.layers["ecliptic"]:
-            c = self.snapshot.ecliptic
-            lon, lat = (c.az, c.alt) if self.mode == "horizontal" else (c.ra, c.dec)
-            self._draw_curve(painter, lon, lat, QPen(QColor(230, 180, 70, 150), 1.2, Qt.DashLine), r_max)
+            self._safe("ecliptic", self._draw_ecliptic, painter, r_max)
         if self.layers["asterisms"] and night > 0:
-            self._draw_asterisms(painter, night)
+            self._safe("asterisms", self._draw_asterisms, painter, night)
         if night > 0:
-            self._draw_stars(painter, night)
+            self._safe("stars", self._draw_stars, painter, night)
         if self.layers["deep_sky"] and night > 0:
-            self._draw_deep_sky(painter)
+            self._safe("deep_sky", self._draw_deep_sky, painter)
         if self.layers["constellation_names"] and night > 0:
-            self._draw_constellation_names(painter)
-        self._draw_horizon(painter, r_max)
+            self._safe("constellation_names", self._draw_constellation_names, painter)
+        self._safe("horizon", self._draw_horizon, painter, r_max)
         if self.layers["bodies"]:
-            self._draw_bodies(painter)
+            self._safe("bodies", self._draw_bodies, painter)
         painter.setClipping(False)
         painter.setPen(QPen(QColor(150, 155, 170), 1.5))
         painter.drawEllipse(QPointF(cx, cy), radius, radius)
@@ -183,6 +184,23 @@ class SkyMapWidget(QWidget):
         painter.drawText(QPointF(10, self.height() - 10),
                          f"Поле зрения {self.fov:.0f}° · "
                          f"{'горизонтальная' if self.mode == 'horizontal' else 'экваториальная'} система")
+
+    def _draw_ecliptic(self, painter: QPainter, r_max: float) -> None:
+        c = self.snapshot.ecliptic
+        lon, lat = (c.az, c.alt) if self.mode == "horizontal" else (c.ra, c.dec)
+        self._draw_curve(painter, lon, lat, QPen(QColor(230, 180, 70, 150), 1.2, Qt.DashLine), r_max)
+
+    def _safe(self, name: str, draw, *args) -> None:
+        """Ошибка в одном слое не должна обрывать рисование остальных; она пишется в лог."""
+        try:
+            draw(*args)
+        except Exception:
+            if name not in self._failed_layers:
+                self._failed_layers.add(name)
+                log.exception("Карта неба: ошибка при рисовании слоя «%s»", name)
+            painter = args[0] if args and isinstance(args[0], QPainter) else None
+            if painter is not None:
+                painter.setBrush(Qt.NoBrush)
 
     def _draw_polyline(self, painter: QPainter, px, py, mask, sx, sy, r_max: float) -> None:
         for run in skymap.split_runs(mask, px, py, max_jump=self._geometry()[2] * 0.9):

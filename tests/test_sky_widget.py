@@ -155,3 +155,17 @@ def test_daylight_stars_toggle(app):
     widget.set_layer("daylight_stars", False)
     widget.grab()
     assert not any(h[2]["type"] == "star" for h in widget._hits)
+
+
+def test_failing_layer_does_not_break_others(app):
+    from ui.sky_widget import SkyMapWidget
+    widget = SkyMapWidget()
+    widget.resize(500, 500)
+    widget.set_snapshot(make_snapshot(sun_alt=20.0))
+
+    def broken(*_a, **_k):
+        raise RuntimeError("тест")
+    widget._draw_milky_way = broken
+    assert not widget.grab().toImage().isNull()
+    assert "milky_way" in widget._failed_layers
+    assert any(h[2]["type"] == "star" for h in widget._hits)        # звёзды всё равно нарисованы
