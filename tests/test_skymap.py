@@ -227,7 +227,7 @@ def test_star_service_reports_bad_format_and_network_errors(tmp_path):
         def download(self, url, dest, progress=None, min_size=1):
             raise ApiError("нет сети")
 
-        def get_text(self, url, params=None):
+        def get_text(self, url, params=None, timeout=None):
             raise ApiError("нет сети")
 
     db = DatabaseManager(tmp_path / "e.db")
@@ -279,7 +279,7 @@ def test_star_service_vizier_fallback_and_import(tmp_path):
         def download(self, url, dest, progress=None, min_size=1):
             raise ApiError("CDS недоступен")
 
-        def get_text(self, url, params=None):
+        def get_text(self, url, params=None, timeout=None):
             self.queried.append((url, params))
             if len(self.queried) == 1:
                 raise ApiError("зеркало 1 недоступно")

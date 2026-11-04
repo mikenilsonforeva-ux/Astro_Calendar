@@ -63,8 +63,9 @@ class HttpClient:
         except ValueError as exc:
             raise ApiError(f"Сервер {url} вернул не JSON.") from exc
 
-    def get_text(self, url: str, params: dict | None = None) -> str:
-        resp = self._request(url, params)
+    def get_text(self, url: str, params: dict | None = None,
+                 timeout: tuple[float, float] | None = None) -> str:
+        resp = self._request(url, params, timeout=timeout)
         return resp.text
 
     def download(self, url: str, dest: Path, progress: Callable[[int, int], None] | None = None,

@@ -22,6 +22,7 @@ FALLBACK_URLS = ("https://cdsarc.cds.unistra.fr/ftp/cats/I/239/hip_main.dat.gz",
 VIZIER_QUERY = {"-source": "I/239/hip_main", "-out.all": "1", "-out.max": "unlimited",
                 "Vmag": f"<{stars.MAG_LIMIT + 0.1}"}
 VIZIER_URLS = ("https://vizier.cfa.harvard.edu/viz-bin/asu-tsv", "https://vizier.cds.unistra.fr/viz-bin/asu-tsv")
+VIZIER_TIMEOUT = (15, 300)     # VizieR готовит выборку долго: ждём ответ до 5 минут
 LOCAL_NAMES = ("hip_main.dat.gz", "hip_main.dat")
 ATTRIBUTION = ("Звёзды: каталог Hipparcos (ESA 1997, CDS I/239), звёзды до 7ᵐ. "
                "Млечный Путь и рисунки созвездий — схематичные.")
@@ -124,7 +125,7 @@ class StarService:
             try:
                 if progress:
                     progress("Запрос звёзд ярче 7ᵐ из VizieR…")
-                text = client.get_text(url, VIZIER_QUERY)
+                text = client.get_text(url, VIZIER_QUERY, timeout=VIZIER_TIMEOUT)
                 return stars.parse_vizier_tsv(text)
             except (ApiError, ValueError) as exc:
                 self._last_error = exc
