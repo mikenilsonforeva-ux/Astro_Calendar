@@ -19,8 +19,15 @@ def setup_logging() -> None:
     )
 
 
+def _log_uncaught(exc_type, exc, tb) -> None:
+    """Необработанные ошибки (в том числе из обработчиков Qt) — в лог, а не только в консоль."""
+    logging.getLogger("uncaught").error("Необработанная ошибка", exc_info=(exc_type, exc, tb))
+    sys.__excepthook__(exc_type, exc, tb)
+
+
 def main() -> int:
     setup_logging()
+    sys.excepthook = _log_uncaught
     logging.getLogger("matplotlib").setLevel(logging.WARNING)      # убрать служебные INFO-сообщения
     log = logging.getLogger("main")
     log.info("Запуск %s %s", config.APP_TITLE, config.APP_VERSION)
