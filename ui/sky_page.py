@@ -8,12 +8,14 @@ from PySide6.QtCore import QDate, QDateTime, QTime
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit, QFileDialog, QGroupBox, QHBoxLayout,
                                QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget)
 
+from astronomy.object_report import build_report, report_to_html
 from astronomy.sky_snapshot import build_snapshot
 from astronomy.time_utils import get_timezone
 from services.star_service import ATTRIBUTION, StarService
 from ui.app_state import AppState
 from ui.base_page import BasePage, heading, hint_label, message_page_layout
-from ui.sky_widget import MODES, SkyMapWidget, describe_object
+from ui.object_dialog import ObjectDialog
+from ui.sky_widget import SkyMapWidget, describe_object
 from ui.workers import run_async
 
 LAYERS = [("star_names", "Названия звёзд"), ("asterisms", "Фигуры созвездий"),
@@ -31,6 +33,8 @@ class SkyPage(BasePage):
         super().__init__(state)
         self.stars = StarService(state.db)
         self._request = 0
+        self._report_request = 0
+        self._dialog: ObjectDialog | None = None
         layout = message_page_layout(self)
         layout.addWidget(heading("Звёздное небо"))
         self.status = hint_label()
@@ -179,6 +183,36 @@ class SkyPage(BasePage):
     def _object_selected(self, info: dict) -> None:
         self.info.setHtml(describe_object({**info, "name": html.escape(str(info["name"])),
                                            "detail": html.escape(str(info.get("detail", "")))}))
+        self._open_report(info)
+
+    # ---- подробная характеристика объекта --------------------------------------------------
+    def _open_report(self, info: dict) -> None:
+        snapshot = self.map.snapshot
+        if snapshot is None:
+            return
+        if self._dialog is None:
+            self._dialog = ObjectDialog(self)
+        name = str(info["name"])
+        self._dialog.show_loading(name)
+        self._report_request += 1
+        request = self._report_request
+        run_async(self._report_work, lambda r: self._report_done(request, r),
+                  lambda m: self._report_failed(request, name, m), info, snapshot.when_utc)
+
+    def _report_work(self, info: dict, when_utc: datetime):
+        ctx = self.state.context()
+        return ctx, when_utc, build_report(ctx, info, when_utc)
+
+    def _report_done(self, request: int, result) -> None:
+        if request != self._report_request or self._dialog is None:
+            return
+        ctx, when_utc, report = result
+        when_text = f"{ctx.local(when_utc):%d.%m.%Y %H:%M} ({ctx.tz.key})"
+        self._dialog.show_html(report.title, report_to_html(report, when_text))
+
+    def _report_failed(self, request: int, name: str, message: str) -> None:
+        if request == self._report_request and self._dialog is not None:
+            self._dialog.show_error(name, message)
 
     # ---- загрузка каталога --------------------------------------------------------------
     def _download(self) -> None:

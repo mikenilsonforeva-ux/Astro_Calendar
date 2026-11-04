@@ -123,3 +123,23 @@ def test_earth_widget_paints(app):
     widget.notice = "тест"
     widget.set_state([], None, None)
     assert not widget.grab().toImage().isNull()
+
+
+def test_click_payloads_for_report(app):
+    from PySide6.QtCore import QPointF
+    from ui.sky_widget import SkyMapWidget
+    snap = make_snapshot()
+    snap.star_parallax, snap.star_pm_ra, snap.star_pm_dec = (np.full(300, 10.0), np.full(300, 1.0), np.full(300, -2.0))
+    snap.star_mag[:] = 3.0
+    widget = SkyMapWidget()
+    widget.resize(600, 600)
+    widget.set_snapshot(snap)
+    widget.grab()
+    types = {h[2]["type"] for h in widget._hits}
+    assert {"moon", "planet"} <= types
+    star = next(h for h in widget._hits if h[2]["type"] == "star")
+    assert star[2]["plx"] == 10.0 and star[2]["hip"] > 0
+    got = []
+    widget.object_selected.connect(got.append)
+    widget._pick(QPointF(star[0], star[1]))
+    assert got and got[0]["type"] == "star"

@@ -59,6 +59,17 @@ def galactic_to_icrs(l_deg, b_deg) -> tuple[np.ndarray, np.ndarray]:
     return np.degrees(ra), np.degrees(dec)
 
 
+def icrs_to_galactic(ra_deg, dec_deg) -> tuple[np.ndarray, np.ndarray]:
+    """Экваториальные (RA, Dec) J2000 -> галактические (l, b), градусы."""
+    ra, dec = np.radians(np.asarray(ra_deg, float)), np.radians(np.asarray(dec_deg, float))
+    sin_b = np.sin(dec) * np.sin(_NGP_DEC) + np.cos(dec) * np.cos(_NGP_DEC) * np.cos(ra - _NGP_RA)
+    b = np.arcsin(np.clip(sin_b, -1.0, 1.0))
+    y = np.cos(dec) * np.sin(ra - _NGP_RA)
+    x = np.sin(dec) * np.cos(_NGP_DEC) - np.cos(dec) * np.sin(_NGP_DEC) * np.cos(ra - _NGP_RA)
+    l = (_L_NCP - np.arctan2(y, x)) % (2 * np.pi)
+    return np.degrees(l), np.degrees(b)
+
+
 def ecliptic_to_icrs(lon_deg, lat_deg) -> tuple[np.ndarray, np.ndarray]:
     """Эклиптические (λ, β) J2000 -> экваториальные (RA, Dec), градусы."""
     lam, beta = np.radians(np.asarray(lon_deg, float)), np.radians(np.asarray(lat_deg, float))

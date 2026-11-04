@@ -262,11 +262,14 @@ class SkyMapWidget(QWidget):
                     painter.drawText(QPointF(float(px[i]) + 6, float(py[i]) - 5), names[int(i)])
         for i in idx[s.star_mag[idx] < 4.5] if len(idx) else []:
             name = names.get(int(i), f"HIP {int(s.star_hip[i])}")
-            self._hits.append((float(px[i]), float(py[i]), {
-                "key": f"star{int(s.star_hip[i])}", "name": name, "kind": "Звезда",
-                "mag": float(s.star_mag[i]), "alt": float(s.star_alt[i]), "az": float(s.star_az[i]),
-                "ra": float(s.star_ra[i]), "dec": float(s.star_dec[i]),
-                "detail": f"HIP {int(s.star_hip[i])}"}))
+            info = {"key": f"star{int(s.star_hip[i])}", "type": "star", "name": name, "kind": "Звезда",
+                    "mag": float(s.star_mag[i]), "alt": float(s.star_alt[i]), "az": float(s.star_az[i]),
+                    "ra": float(s.star_ra[i]), "dec": float(s.star_dec[i]), "hip": int(s.star_hip[i]),
+                    "detail": f"HIP {int(s.star_hip[i])}"}
+            if s.star_parallax is not None:
+                info.update(plx=float(s.star_parallax[i]), pm_ra=float(s.star_pm_ra[i]),
+                            pm_dec=float(s.star_pm_dec[i]))
+            self._hits.append((float(px[i]), float(py[i]), info))
 
     def _draw_asterisms(self, painter: QPainter, night: float) -> None:
         s = self.snapshot
@@ -315,8 +318,8 @@ class SkyMapWidget(QWidget):
             label = f"M{o['messier']}" if o.get("messier") else o["catalog_id"]
             painter.drawText(QPointF(float(px[i]) + 7, float(py[i]) + 4), label)
             self._hits.append((float(px[i]), float(py[i]), {
-                "key": o["catalog_id"], "name": o.get("name_ru") or o.get("name") or label,
-                "kind": "Объект глубокого космоса", "mag": o.get("magnitude"), "alt": o["alt"], "az": o["az"],
+                "key": o["catalog_id"], "type": "deepsky", "object": o,
+                "name": o.get("name_ru") or o.get("name") or label, "kind": "Объект глубокого космоса", "mag": o.get("magnitude"), "alt": o["alt"], "az": o["az"],
                 "ra": o["ra_deg"], "dec": o["dec_deg"], "detail": f"{label} / {o['catalog_id']}"}))
 
     def _draw_horizon(self, painter: QPainter, r_max: float) -> None:
@@ -371,7 +374,7 @@ class SkyMapWidget(QWidget):
                 painter.drawEllipse(QPointF(x, y), radius, radius)
             painter.setPen(QColor(255, 245, 200))
             painter.drawText(QPointF(x + 11, y - 7), b.name)
-            self._hits.append((x, y, {"key": b.key, "name": b.name, "kind": {"sun": "Солнце", "moon": "Луна"}.get(
+            self._hits.append((x, y, {"key": b.key, "type": b.kind, "name": b.name, "kind": {"sun": "Солнце", "moon": "Луна"}.get(
                 b.kind, "Планета"), "mag": b.mag, "alt": b.alt, "az": b.az, "ra": b.ra, "dec": b.dec,
                 "detail": b.detail}))
         if self.selected_key:

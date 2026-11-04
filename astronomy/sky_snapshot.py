@@ -69,6 +69,9 @@ class SkySnapshot:
     cardinals: list[tuple[str, float, float]]                   # подпись, ra, dec  (в J2000)
     bodies: list[SkyBody] = field(default_factory=list)
     deep_sky: list[dict] = field(default_factory=list)          # + alt, az
+    star_parallax: np.ndarray | None = None
+    star_pm_ra: np.ndarray | None = None
+    star_pm_dec: np.ndarray | None = None
 
 
 def _altaz(ctx: AstroContext, t, ra_deg, dec_deg, cat: StarCatalog | None = None):
@@ -165,4 +168,5 @@ def build_snapshot(ctx: AstroContext, when_utc: datetime, cat: StarCatalog,
         milky_way=_curve(ctx, t, *skymap.galactic_plane_points(181)),
         ecliptic=_curve(ctx, t, *skymap.ecliptic_points(181)),
         horizon_ra=np.asarray(h_ra), horizon_dec=np.asarray(h_dec), cardinals=cardinals,
-        bodies=bodies, deep_sky=objects)
+        bodies=bodies, deep_sky=objects,
+        star_parallax=cat.parallax, star_pm_ra=cat.pm_ra, star_pm_dec=cat.pm_dec)
