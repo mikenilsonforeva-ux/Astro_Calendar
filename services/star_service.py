@@ -19,6 +19,10 @@ log = logging.getLogger(__name__)
 
 FALLBACK_URLS = ("https://cdsarc.cds.unistra.fr/ftp/cats/I/239/hip_main.dat.gz",
                  "https://cdsarc.u-strasbg.fr/ftp/cats/I/239/hip_main.dat.gz")
+VIZIER_QUERY = {"-source": "I/239/hip_main", "-out.all": "1", "-out.max": "unlimited",
+                "Vmag": f"<{stars.MAG_LIMIT + 0.1}"}
+VIZIER_URLS = ("https://vizier.cfa.harvard.edu/viz-bin/asu-tsv", "https://vizier.cds.unistra.fr/viz-bin/asu-tsv")
+LOCAL_NAMES = ("hip_main.dat.gz", "hip_main.dat")
 ATTRIBUTION = ("Звёзды: каталог Hipparcos (ESA 1997, CDS I/239), звёзды до 7ᵐ. "
                "Млечный Путь и рисунки созвездий — схематичные.")
 
@@ -61,34 +65,83 @@ class StarService:
     def download(self, progress: Callable[[str], None] | None = None,
                  client: HttpClient | None = None) -> int:
         started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        client = client or HttpClient(read_timeout=60)
+        client = client or HttpClient(connect_timeout=15, read_timeout=60, retries=2)
         raw = self.directory / "hip_main.dat.gz"
-        last_error: Exception | None = None
+        self._last_error = None
         try:
-            for url in _hipparcos_urls():
-                try:
-                    if progress:
-                        progress("Загрузка каталога Hipparcos (≈ 50 МБ)…")
-                    client.download(url, raw, min_size=10_000_000)
-                    break
-                except ApiError as exc:
-                    last_error = exc
-                    log.warning("Hipparcos: %s недоступен: %s", url, exc)
-            else:
-                raise ApiError(f"Не удалось скачать каталог Hipparcos: {last_error}")
-            if progress:
-                progress("Обработка каталога…")
-            try:
-                cat = stars.parse_hip_main_file(raw)
-            except ValueError as exc:
-                raise ApiError(str(exc)) from exc
+            cat = self._from_local_file()
+            if cat is None:
+                cat = self._from_archive(client, raw, progress)
+            if cat is None:
+                cat = self._from_vizier(client, progress)
+            if cat is None:
+                raise ApiError(f"Не удалось скачать каталог Hipparcos: {self._last_error}. "
+                               f"Можно скачать файл вручную и положить его в {self.directory} "
+                               "(hip_main.dat.gz) либо выбрать кнопкой «Импортировать файл».")
             stars.save_catalog(cat, self.catalog_path)
-            raw.unlink(missing_ok=True)           # исходный файл больше не нужен
             self._catalog = cat
         except (ApiError, OSError) as exc:
             self.db.log_update("stars", "error", str(exc), started)
             raise
         self.db.log_update("stars", "ok", f"Hipparcos: {len(cat)} звёзд до {stars.MAG_LIMIT}ᵐ", started)
+        return len(cat)
+
+    _last_error: Exception | None = None
+
+    def _from_local_file(self):
+        """Файл, который пользователь положил в папку каталога вручную."""
+        for name in LOCAL_NAMES:
+            path = self.directory / name
+            if path.is_file():
+                try:
+                    return stars.parse_hip_main_file(path)
+                except (ValueError, OSError) as exc:
+                    raise ApiError(f"Файл {path.name} не удалось разобрать: {exc}") from exc
+        return None
+
+    def _from_archive(self, client, raw: Path, progress):
+        """Полный каталог Hipparcos (≈ 50 МБ) с серверов CDS."""
+        for url in _hipparcos_urls():
+            try:
+                if progress:
+                    progress("Загрузка каталога Hipparcos (≈ 50 МБ)…")
+                client.download(url, raw, min_size=10_000_000)
+            except ApiError as exc:
+                self._last_error = exc
+                log.warning("Hipparcos: %s недоступен: %s", url, exc)
+                continue
+            try:
+                return stars.parse_hip_main_file(raw)
+            except ValueError as exc:
+                raise ApiError(str(exc)) from exc
+            finally:
+                raw.unlink(missing_ok=True)       # исходный файл больше не нужен
+        return None
+
+    def _from_vizier(self, client, progress):
+        """Запасной путь: запрос к VizieR только на звёзды ярче 7ᵐ (около 1 МБ)."""
+        for url in VIZIER_URLS:
+            try:
+                if progress:
+                    progress("Запрос звёзд ярче 7ᵐ из VizieR…")
+                text = client.get_text(url, VIZIER_QUERY)
+                return stars.parse_vizier_tsv(text)
+            except (ApiError, ValueError) as exc:
+                self._last_error = exc
+                log.warning("VizieR %s: %s", url, exc)
+        return None
+
+    def import_file(self, path: str | Path) -> int:
+        """Импорт файла hip_main.dat / hip_main.dat.gz, скачанного пользователем вручную."""
+        started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        try:
+            cat = stars.parse_hip_main_file(Path(path))
+            stars.save_catalog(cat, self.catalog_path)
+        except (ValueError, OSError) as exc:
+            self.db.log_update("stars", "error", str(exc), started)
+            raise ApiError(f"Не удалось импортировать файл: {exc}") from exc
+        self._catalog = cat
+        self.db.log_update("stars", "ok", f"Hipparcos (импорт файла): {len(cat)} звёзд", started)
         return len(cat)
 
     # ---- центры созвездий ------------------------------------------------------------------

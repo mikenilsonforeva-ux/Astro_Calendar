@@ -227,6 +227,9 @@ def test_star_service_reports_bad_format_and_network_errors(tmp_path):
         def download(self, url, dest, progress=None, min_size=1):
             raise ApiError("нет сети")
 
+        def get_text(self, url, params=None):
+            raise ApiError("нет сети")
+
     db = DatabaseManager(tmp_path / "e.db")
     svc = star_service.StarService(db, tmp_path / "stars")
     with pytest.raises(ApiError, match="слишком мало"):
@@ -235,3 +238,80 @@ def test_star_service_reports_bad_format_and_network_errors(tmp_path):
         svc.download(client=Offline())
     assert not svc.is_available()
     assert [u["status"] for u in db.list_updates()] == ["error", "error"]
+
+
+# ---------- запасной источник VizieR и ручной импорт ----------
+def make_vizier_tsv(n=5300, columns=("HIP", "RAhms", "Vmag", "RAdeg", "DEdeg", "Plx", "pmRA", "pmDE")):
+    rows = ["#\n#   VizieR Astronomical Server", "\t".join(columns), "\t".join(["", "h:m:s", "mag", "deg", "deg", "mas", "mas/yr", "mas/yr"]),
+            "\t".join(["---"] * len(columns))]
+    for i in range(n):
+        mag = -1.46 if i == 0 else 3.0 + (i % 40) / 10.0
+        values = {"HIP": str(32349 + i), "RAhms": "06 45 08", "Vmag": f"{mag:.2f}", "RAdeg": f"{(i * 0.069) % 360:.5f}",
+                  "DEdeg": f"{-89 + (i % 178):.4f}", "Plx": "379.21", "pmRA": "-546.01", "pmDE": "-1223.07"}
+        values["RAICRS"], values["DEICRS"] = values["RAdeg"], values["DEdeg"]
+        rows.append("\t".join(values.get(c, "") for c in columns))
+    return "\n".join(rows)
+
+
+def test_parse_vizier_tsv_and_aliases():
+    from astronomy import stars
+    cat = stars.parse_vizier_tsv(make_vizier_tsv())
+    assert len(cat) == 5300 and cat.mag.min() == pytest.approx(-1.46) and cat.pm_dec[0] == pytest.approx(-1223.07)
+    alt = stars.parse_vizier_tsv(make_vizier_tsv(columns=("HIP", "RAhms", "Vmag", "RAICRS", "DEICRS", "Plx", "pmRA", "pmDE")))
+    assert len(alt) == 5300
+    with pytest.raises(ValueError, match="нет столбца"):
+        stars.parse_vizier_tsv(make_vizier_tsv(columns=("HIP", "Vmag", "X", "Y")))
+    with pytest.raises(ValueError):
+        stars.parse_vizier_tsv("#только комментарий")
+    with pytest.raises(ValueError, match="слишком мало"):
+        stars.parse_vizier_tsv(make_vizier_tsv(n=50))
+
+
+def test_star_service_vizier_fallback_and_import(tmp_path):
+    from api.http_client import ApiError
+    from database.db_manager import DatabaseManager
+    from services import star_service
+
+    class ArchiveDown:
+        def __init__(self):
+            self.queried = []
+
+        def download(self, url, dest, progress=None, min_size=1):
+            raise ApiError("CDS недоступен")
+
+        def get_text(self, url, params=None):
+            self.queried.append((url, params))
+            if len(self.queried) == 1:
+                raise ApiError("зеркало 1 недоступно")
+            return make_vizier_tsv()
+
+    db = DatabaseManager(tmp_path / "v.db")
+    svc = star_service.StarService(db, tmp_path / "stars")
+    client = ArchiveDown()
+    assert svc.download(client=client) == 5300 and svc.is_available()
+    assert len(client.queried) == 2 and client.queried[1][1]["-source"] == "I/239/hip_main"
+
+    manual = tmp_path / "manual" / "hip_main.dat.gz"
+    manual.parent.mkdir()
+    manual.write_bytes(gzip.compress("\n".join(make_catalog_lines()).encode("ascii")))
+    other = star_service.StarService(DatabaseManager(tmp_path / "m.db"), tmp_path / "stars2")
+    assert other.import_file(manual) == 5202
+    with pytest.raises(ApiError, match="импортировать"):
+        other.import_file(tmp_path / "нет_файла.dat")
+
+
+def test_star_service_uses_file_placed_manually(tmp_path):
+    from database.db_manager import DatabaseManager
+    from services import star_service
+
+    class NoNetwork:
+        def download(self, *a, **k):
+            raise AssertionError("сеть не должна использоваться")
+
+        get_text = download
+
+    folder = tmp_path / "stars"
+    folder.mkdir()
+    (folder / "hip_main.dat.gz").write_bytes(gzip.compress("\n".join(make_catalog_lines()).encode("ascii")))
+    svc = star_service.StarService(DatabaseManager(tmp_path / "f.db"), folder)
+    assert svc.download(client=NoNetwork()) == 5202

@@ -21,6 +21,7 @@ def setup_logging() -> None:
 
 def main() -> int:
     setup_logging()
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)      # убрать служебные INFO-сообщения
     log = logging.getLogger("main")
     log.info("Запуск %s %s", config.APP_TITLE, config.APP_VERSION)
 

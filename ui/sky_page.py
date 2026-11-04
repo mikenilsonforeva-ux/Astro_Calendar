@@ -5,8 +5,8 @@ import html
 from datetime import datetime, timedelta, timezone
 
 from PySide6.QtCore import QDate, QDateTime, QTime
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit, QGroupBox, QHBoxLayout, QLabel,
-                               QPushButton, QTextBrowser, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit, QFileDialog, QGroupBox, QHBoxLayout,
+                               QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget)
 
 from astronomy.sky_snapshot import build_snapshot
 from astronomy.time_utils import get_timezone
@@ -97,6 +97,11 @@ class SkyPage(BasePage):
         self.download_btn = QPushButton("Скачать каталог звёзд (интернет)")
         self.download_btn.clicked.connect(self._download)
         side.addWidget(self.download_btn)
+        self.import_btn = QPushButton("Импортировать файл каталога…")
+        self.import_btn.setToolTip("Если скачать каталог не удаётся: выберите вручную скачанный файл "
+                                   "hip_main.dat или hip_main.dat.gz (CDS, каталог I/239)")
+        self.import_btn.clicked.connect(self._import_file)
+        side.addWidget(self.import_btn)
         self.info = QTextBrowser()
         self.info.setMinimumHeight(180)
         self.info.setHtml("<p>Щёлкните по объекту на карте. Колесо мыши — масштаб, "
@@ -133,10 +138,13 @@ class SkyPage(BasePage):
     def rebuild(self) -> None:
         if not self.stars.is_available():
             self.status.setText("Звёздный каталог не загружен. Нажмите «Скачать каталог звёзд» "
-                                "(≈ 50 МБ из Hipparcos, один раз; после обработки хранится ≈ 1 МБ).")
+                                "(один раз; при недоступности серверов CDS запрашиваются только звёзды ярче 7ᵐ из VizieR, "
+                                "либо можно импортировать файл hip_main.dat.gz вручную).")
             self.download_btn.setVisible(True)
+            self.import_btn.setVisible(True)
             return
         self.download_btn.setVisible(False)
+        self.import_btn.setVisible(False)
         self._request += 1
         request = self._request
         self.status.setText("Расчёт положений…")
@@ -175,8 +183,15 @@ class SkyPage(BasePage):
     # ---- загрузка каталога --------------------------------------------------------------
     def _download(self) -> None:
         self.download_btn.setEnabled(False)
-        self.status.setText("Загрузка каталога Hipparcos (≈ 50 МБ)… это может занять несколько минут.")
+        self.status.setText("Загрузка каталога Hipparcos… это может занять несколько минут (при недоступности серверов CDS будет использован запасной источник).")
         run_async(self.stars.download, self._downloaded, self._download_failed)
+
+    def _import_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Файл каталога Hipparcos", "",
+                                              "Hipparcos (hip_main.dat hip_main.dat.gz);;Все файлы (*)")
+        if path:
+            self.status.setText("Обработка файла каталога…")
+            run_async(self.stars.import_file, self._downloaded, self._download_failed, path)
 
     def _downloaded(self, count: int) -> None:
         self.download_btn.setEnabled(True)

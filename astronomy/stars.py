@@ -67,6 +67,54 @@ def parse_hip_main(lines: Iterable[str], mag_limit: float = MAG_LIMIT) -> StarCa
     return StarCatalog(a[:, 0].astype(int), a[:, 1], a[:, 2], a[:, 3], a[:, 4], a[:, 5], a[:, 6])
 
 
+_VIZIER_ALIASES = {
+    "hip": ("HIP",), "mag": ("Vmag",), "ra": ("RAICRS", "RAdeg", "_RAJ2000", "RA_ICRS"),
+    "dec": ("DEICRS", "DEdeg", "_DEJ2000", "DE_ICRS"), "plx": ("Plx",), "pmra": ("pmRA",), "pmde": ("pmDE",)}
+
+
+def parse_vizier_tsv(text: str, mag_limit: float = MAG_LIMIT) -> StarCatalog:
+    """Разбор ответа VizieR (asu-tsv) для каталога I/239/hip_main.
+
+    Строки с «#» — комментарии; первая строка без «#» — названия столбцов, далее строка единиц и
+    строка из «---», затем данные, разделённые табуляцией. Названия столбцов ищутся по списку
+    допустимых вариантов; если нужных нет — ValueError.
+    """
+    lines = [ln for ln in text.splitlines() if ln.strip() and not ln.startswith("#")]
+    if len(lines) < 4:
+        raise ValueError("Ответ VizieR не содержит данных.")
+    header = [h.strip() for h in lines[0].split("\t")]
+    index = {}
+    for key, names in _VIZIER_ALIASES.items():
+        found = next((header.index(n) for n in names if n in header), None)
+        if found is None and key in ("hip", "mag", "ra", "dec"):
+            raise ValueError(f"В ответе VizieR нет столбца {names[0]} (есть: {', '.join(header[:12])}).")
+        index[key] = found
+    rows = []
+    for line in lines[1:]:
+        f = line.split("\t")
+        if len(f) < len(header):
+            continue
+        try:
+            hip = int(f[index["hip"]])
+        except ValueError:
+            continue                    # строка единиц, разделитель «---» и т. п.
+        mag, ra, dec = _float(f[index["mag"]]), _float(f[index["ra"]]), _float(f[index["dec"]])
+        if mag is None or ra is None or dec is None or mag > mag_limit:
+            continue
+        if not (0.0 <= ra < 360.0 and -90.0 <= dec <= 90.0):
+            continue
+
+        def opt(key):
+            return (_float(f[index[key]]) or 0.0) if index[key] is not None else 0.0
+        rows.append((hip, ra, dec, mag, opt("plx"), opt("pmra"), opt("pmde")))
+    if len(rows) < 5000:
+        raise ValueError(f"Каталог VizieR распознан неверно: слишком мало звёзд ({len(rows)}).")
+    a = np.array(rows, dtype=float)
+    if a[:, 3].min() > -1.0:
+        raise ValueError("Каталог VizieR распознан неверно: нет самой яркой звезды (Сириус).")
+    return StarCatalog(a[:, 0].astype(int), a[:, 1], a[:, 2], a[:, 3], a[:, 4], a[:, 5], a[:, 6])
+
+
 def parse_hip_main_file(path: Path, mag_limit: float = MAG_LIMIT) -> StarCatalog:
     path = Path(path)
     opener = gzip.open if path.suffix == ".gz" else open
