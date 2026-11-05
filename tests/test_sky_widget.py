@@ -169,3 +169,20 @@ def test_failing_layer_does_not_break_others(app):
     assert not widget.grab().toImage().isNull()
     assert "milky_way" in widget._failed_layers
     assert any(h[2]["type"] == "star" for h in widget._hits)        # звёзды всё равно нарисованы
+
+
+def test_night_sky_is_dark_and_ring_not_filled(app):
+    """Регрессия: рамка круга заливалась цветом последней планеты — всё небо становилось одноцветным."""
+    from ui.sky_widget import SkyMapWidget
+    for mode in ("horizontal", "equatorial"):
+        widget = SkyMapWidget()
+        widget.resize(600, 600)
+        widget.set_snapshot(make_snapshot(sun_alt=-40.0))
+        widget.set_mode(mode)
+        image = widget.grab().toImage()
+        # точки внутри круга в стороне от объектов: небо должно быть тёмным, а не залитым цветом
+        dark = 0
+        for x, y in ((300, 60), (120, 300), (480, 300), (300, 540), (180, 180)):
+            c = image.pixelColor(x, y)
+            dark += int(max(c.red(), c.green(), c.blue()) < 110)
+        assert dark >= 4, f"небо залито цветом в режиме {mode}"

@@ -178,6 +178,7 @@ class SkyMapWidget(QWidget):
         if self.layers["bodies"]:
             self._safe("bodies", self._draw_bodies, painter)
         painter.setClipping(False)
+        painter.setBrush(Qt.NoBrush)       # иначе рамка зальётся цветом последнего нарисованного объекта
         painter.setPen(QPen(QColor(150, 155, 170), 1.5))
         painter.drawEllipse(QPointF(cx, cy), radius, radius)
         painter.setPen(QColor(210, 210, 220))
